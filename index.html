@@ -2,7 +2,7 @@
 <html lang="id">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="manifest" href="manifest.json"><meta name="theme-color" content="#1f7a4d"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><link rel="apple-touch-icon" href="icon-192.png"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Aplikasi Terpadu RKP, Pencairan, SPJ &amp; PBJ Desa</title>
 <style>
 :root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
@@ -996,7 +996,7 @@ try{af()}catch(e){}
 <script>
 /* ===== v9: Data bersama via Supabase (login + realtime) ===== */
 (function(){
-var C=window.RKP_CONFIG||{},NM={"":"main",h:"h",rab:"rab",ssh:"ssh",pd:"pd",cair2:"cair2",rencana:"rencana",tx:"tx",pj:"pj",dg:"dg"},KEY={},ME=Math.random().toString(36).slice(2),CH=90000,sb=null,on=false,T={},ss=window.sessionStorage,rawSet=Storage.prototype.setItem,remote=false,rt=null;
+var C=window.RKP_CONFIG||{},NM={"":"main",h:"h",rab:"rab",ssh:"ssh",pd:"pd",cair2:"cair2",rencana:"rencana",tx:"tx",pj:"pj",dg:"dg"},KEY={},ME=Math.random().toString(36).slice(2),CH=90000,sb=null,on=false,T={},ss=window.localStorage,rawSet=Storage.prototype.setItem,remote=false,rt=null;
 Object.keys(NM).forEach(function(k){KEY[NM[k]]=K+k});
 function nameOf(k){for(var n in KEY)if(KEY[n]===k)return n;return null}
 function dirty(n,v){try{v?ss.setItem("rkpd_"+n,"1"):ss.removeItem("rkpd_"+n)}catch(e){}}
@@ -1024,14 +1024,16 @@ function proc(rows){var by={};rows.forEach(function(x){(by[x.name]=by[x.name]||{
 function pull(){sb.from("rkp_state").select("*").then(function(r){if(r.error){st("🔴 Gagal membaca data");return}proc(r.data||[])})}
 function start(){on=true;po.style.display="";pull();
  sb.channel("rkp").on("postgres_changes",{event:"*",schema:"public",table:"rkp_state"},function(){clearTimeout(rt);rt=setTimeout(pull,400)}).subscribe();
- setInterval(pull,30000)}
+ setInterval(pull,30000);window.addEventListener("online",pull)}
 function login(){var o=document.createElement("div");o.className="np";o.style.cssText="position:fixed;inset:0;z-index:100;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:16px";
  o.innerHTML="<div class='c' style='max-width:340px;width:100%'><h3 style='margin:0 0 4px'>Masuk</h3><p class='m' style='margin:0 0 10px'>Akun dibuat oleh admin desa.</p><label>Email</label><input id='lge' type='email' autocomplete='username'><label style='margin-top:8px'>Kata sandi</label><input id='lgp' type='password' autocomplete='current-password'><div id='lgm' class='wn m' style='margin:6px 0'></div><button id='lgb' style='width:100%'>Masuk</button></div>";
  document.body.appendChild(o);
- function go(){sb.auth.signInWithPassword({email:document.getElementById("lge").value.trim(),password:document.getElementById("lgp").value}).then(function(r){if(r.error){document.getElementById("lgm").textContent="Email atau kata sandi salah.";return}o.remove();start()})}
+ function go(){sb.auth.signInWithPassword({email:document.getElementById("lge").value.trim(),password:document.getElementById("lgp").value}).then(function(r){if(r.error){var m=(r.error.message||"").toLowerCase(),t=r.error.message;if(m.indexOf("invalid login")>=0)t="Email atau kata sandi salah, atau akun belum dibuat di Supabase.";else if(m.indexOf("not confirmed")>=0)t="Email belum dikonfirmasi. Di Supabase: Authentication > Users > titik tiga > Confirm user.";else if(m.indexOf("api key")>=0||m.indexOf("apikey")>=0)t="Kunci anon di config.js salah. Salin ulang dari Project Settings > API.";document.getElementById("lgm").textContent=t+" ["+r.error.message+"]";return}o.remove();start()})}
  document.getElementById("lgb").onclick=go;document.getElementById("lgp").onkeydown=function(e){if(e.key==="Enter")go()}}
 if(C.url&&C.key&&window.supabase){sb=supabase.createClient(C.url,C.key);st("⏳ Menghubungkan…");sb.auth.getSession().then(function(r){if(r.data&&r.data.session)start();else{st("🔒 Silakan masuk");login()}})}
 })();
 </script>
+<style>html{overscroll-behavior-y:contain}body{padding-bottom:env(safe-area-inset-bottom,0)}@media(max-width:640px){input,select,textarea{font-size:16px}}</style>
+<script>if("serviceWorker"in navigator&&location.protocol.indexOf("http")===0)addEventListener("load",function(){navigator.serviceWorker.register("sw.js").catch(function(){})});</script>
 </body>
 </html>
