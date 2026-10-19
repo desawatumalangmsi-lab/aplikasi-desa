@@ -1,5 +1,5 @@
 // Isi dengan data dari Supabase: Project Settings > API
 window.RKP_CONFIG = {
-  url: "https://pijejcqowttqefsxchty.supabase.co",   // Project URL
-  key: "sb_publishable_eBei1ZfUfCG8N7Mv_rQV0Q_qH4agnxO"   // anon public key (bukan service_role!)
+  url: "https://zgjfymosmumudemkyvtd.supabase.co/",
+  key: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpnamZ5bW9zbXVtdWRlbWt5dnRkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIzODU0NTksImV4cCI6MjEwNzk2MTQ1OX0.ns2Hd8rlYDwQXWrAs1NbNTEXqnNqJF72Ip1Iwx70GWY"
 };
