@@ -1325,25 +1325,98 @@ try{af()}catch(e){}
 <script src="config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script>
-/* ===== v9: Data bersama via Supabase (login + realtime) ===== */
+/* ===== v9: Data bersama via Supabase (login + realtime) · v16: hak akses per bidang ===== */
 (function(){
-var C=window.RKP_CONFIG||{},NM={"":"main",h:"h",rab:"rab",ssh:"ssh",pd:"pd",cair2:"cair2",rencana:"rencana",tx:"tx",pj:"pj",dg:"dg",lr:"lr",rabv:"rabv"},KEY={},ME=Math.random().toString(36).slice(2),CH=90000,sb=null,on=false,T={},ss=window.localStorage,rawSet=Storage.prototype.setItem,remote=false,rt=null;
+var C=window.RKP_CONFIG||{},NM={"":"main",h:"h",rab:"rab",ssh:"ssh",pd:"pd",cair2:"cair2",rencana:"rencana",tx:"tx",pj:"pj",dg:"dg",lr:"lr",rabv:"rabv"},KEY={},ME=Math.random().toString(36).slice(2),CH=90000,sb=null,on=false,T={},ss=window.localStorage,rawSet=Storage.prototype.setItem,remote=false,rt=null,ROLE={all:true,b:[],label:""},DOM=C.domain||"watumalang.desa.id";
 Object.keys(NM).forEach(function(k){KEY[NM[k]]=K+k});
 function nameOf(k){for(var n in KEY)if(KEY[n]===k)return n;return null}
 function dirty(n,v){try{v?ss.setItem("rkpd_"+n,"1"):ss.removeItem("rkpd_"+n)}catch(e){}}
 function isDirty(n){try{return !!ss.getItem("rkpd_"+n)}catch(e){return false}}
-var pill=document.createElement("div");pill.className="np";pill.style.cssText="position:fixed;left:10px;bottom:10px;z-index:50;padding:5px 10px;border-radius:999px;border:1px solid var(--bd);background:var(--card);font-size:12px;color:var(--mu);display:flex;gap:8px;align-items:center";
-var pt=document.createElement("span"),po=document.createElement("a");po.textContent="Keluar";po.href="#";po.style.display="none";po.onclick=function(e){e.preventDefault();sb.auth.signOut().then(function(){location.reload()})};pill.appendChild(pt);pill.appendChild(po);document.body.appendChild(pill);
+
+/* ---- Hak akses per bidang (murni logika data, tanpa DOM) ----
+   Akun dengan app_metadata.bidang = ["01"] hanya melihat & mengubah kegiatan Bidang 01 beserta
+   RAB, rencana/realisasi pencairan, transaksi, dokumen SPJ dan laporan yang terkait kegiatan itu.
+   Akun tanpa app_metadata.bidang (atau "*") = akses penuh. */
+var RO={h:1,pd:1,rabv:1}; /* data umum: hanya bisa diubah akun akses penuh */
+function J(s,d){try{var v=JSON.parse(s);return v==null?d:v}catch(e){return d}}
+function inB(k,B){return B.indexOf(String(k||"").slice(0,2))>=0}
+function mkCtx(srcs,B){var k_={},q_={},t_={};
+ srcs.forEach(function(P){(P.main||[]).forEach(function(x){if(x&&x.id&&inB(x.k,B))k_[x.id]=1})});
+ srcs.forEach(function(P){(P.rab||[]).forEach(function(x){if(x&&x.q&&k_[x.r])q_[x.q]=1})});
+ srcs.forEach(function(P){(P.tx||[]).forEach(function(x){if(x&&x.id&&q_[x.q])t_[x.id]=1})});
+ return{k:k_,q:q_,t:t_,B:B}}
+function inScope(n,x,key,c){
+ if(n==="main")return !!x&&inB(x.k,c.B);
+ if(n==="rab")return !!x&&!!c.k[x.r];
+ if(n==="tx")return !!x&&!!c.q[x.q];
+ if(n==="cair2"||n==="rencana")return !!c.q[key];
+ if(n==="dg")return !!c.t[key];
+ if(n==="lr")return !!c.k[key];
+ return true}
+function isArr(n){return n==="main"||n==="rab"||n==="tx"}
+function isMap(n){return n==="cair2"||n==="rencana"||n==="dg"||n==="lr"}
+function plain(v){return !!v&&typeof v==="object"&&!Array.isArray(v)}
+function view(n,v,c){
+ if(isArr(n)&&Array.isArray(v))return v.filter(function(x){return inScope(n,x,null,c)});
+ if(isMap(n)&&plain(v)){var o={};Object.keys(v).forEach(function(k){if(inScope(n,null,k,c))o[k]=v[k]});return o}
+ return v}
+function merge(n,loc,srv,c){
+ if(RO[n])return srv==null?loc:srv;
+ if(isArr(n)&&Array.isArray(loc)){
+  var keep=(Array.isArray(srv)?srv:[]).filter(function(x){return !inScope(n,x,null,c)});
+  return keep.concat(loc.filter(function(x){return inScope(n,x,null,c)}))}
+ if(isMap(n)&&plain(loc)){var o={},s=plain(srv)?srv:{};
+  Object.keys(s).forEach(function(k){if(!inScope(n,null,k,c))o[k]=s[k]});
+  Object.keys(loc).forEach(function(k){if(inScope(n,null,k,c))o[k]=loc[k]});return o}
+ return loc}
+function assemble(rows){var by={},S={},bad={};
+ rows.forEach(function(x){(by[x.name]=by[x.name]||{})[x.i]=x});
+ Object.keys(by).forEach(function(n){var p=by[n],h=p[0];if(!h){bad[n]=1;return}var s="";for(var i=0;i<h.n;i++){if(!p[i]){bad[n]=1;return}s+=p[i].v}S[n]={s:s,by:h.by}});
+ return{S:S,bad:bad}}
+function roleOf(u){var m=(u&&u.app_metadata)||{},b=m.bidang,all=(b==null||b==="*"||b==="all"||(Array.isArray(b)&&b.indexOf("*")>=0));
+ if(!all)b=(Array.isArray(b)?b:String(b).split(/[\s,;]+/)).map(function(x){x=String(x).replace(/\D/g,"");return x?("0"+x).slice(-2):""}).filter(Boolean);
+ var j=m.jabatan||m.nama||"";
+ return{all:all,b:all?[]:b,label:(j?j+" · ":"")+(all?"semua bidang":"bidang "+b.join(", "))}}
+function localP(){var P={};["main","rab","tx"].forEach(function(n){P[n]=J(ss.getItem(KEY[n]),null)});return P}
+function sig(){return ROLE.all?"*":ROLE.b.slice().sort().join(",")}
+
+/* ---- Indikator & tombol ---- */
+var pill=document.createElement("div");pill.className="np";pill.style.cssText="position:fixed;left:10px;bottom:10px;z-index:50;padding:5px 10px;border-radius:999px;border:1px solid var(--bd);background:var(--card);font-size:12px;color:var(--mu);display:flex;gap:8px;align-items:center;flex-wrap:wrap;max-width:calc(100vw - 20px)";
+var pr=document.createElement("b"),pt=document.createElement("span"),po=document.createElement("a"),pw=document.createElement("a");
+pr.style.cssText="color:var(--tx);font-weight:600";
+po.textContent="Keluar";po.href="#";po.style.display="none";
+po.onclick=function(e){e.preventDefault();if(Object.keys(KEY).some(isDirty)&&!confirm("Masih ada perubahan yang belum tersimpan ke server. Tetap keluar?"))return;sb.auth.signOut().then(function(){location.reload()})};
+pw.textContent="Ganti sandi";pw.href="#";pw.style.display="none";
+pw.onclick=function(e){e.preventDefault();var p=prompt("Kata sandi baru (minimal 8 karakter):");if(!p)return;if(p.length<8){alert("Minimal 8 karakter.");return}sb.auth.updateUser({password:p}).then(function(r){alert(r.error?"Gagal mengganti kata sandi: "+r.error.message:"Kata sandi berhasil diganti.")})};
+pill.appendChild(pr);pill.appendChild(pt);pill.appendChild(pw);pill.appendChild(po);document.body.appendChild(pill);
 function st(t){pt.textContent=t}st("⚪ Mode lokal (belum terhubung ke Supabase)");
+
 Storage.prototype.setItem=function(k,v){rawSet.call(this,k,v);if(this!==localStorage||remote)return;var n=nameOf(k);if(!n)return;dirty(n,1);if(!on)return;clearTimeout(T[n]);st("⏳ Menyimpan…");T[n]=setTimeout(function(){push(n)},500)};
-function push(n){delete T[n];if(!on)return;var v=localStorage.getItem(KEY[n])||"",c=[];for(var i=0;i<v.length;i+=CH)c.push(v.slice(i,i+CH));if(!c.length)c=[""];
+
+/* ---- Kirim ke server ---- */
+function put(n,v){var c=[];for(var i=0;i<v.length;i+=CH)c.push(v.slice(i,i+CH));if(!c.length)c=[""];
  var rows=c.map(function(s,i){return{name:n,i:i,n:c.length,v:s,by:ME,updated_at:new Date().toISOString()}});
- sb.from("rkp_state").upsert(rows).then(function(r){if(r.error)throw r.error;return sb.from("rkp_state").delete().eq("name",n).gte("i",c.length)}).then(function(){dirty(n,0);if(!Object.keys(T).length)st("🟢 Data bersama aktif")}).catch(function(){st("🔴 Gagal menyimpan — cek koneksi/login")})}
+ return sb.from("rkp_state").upsert(rows).then(function(r){if(r.error)throw r.error;return sb.from("rkp_state").delete().eq("name",n).gte("i",c.length)})}
+function done(n){dirty(n,0);if(!Object.keys(T).length)st("🟢 Data bersama aktif")}
+function fail(){st("🔴 Gagal menyimpan — cek koneksi/login")}
+function push(n){delete T[n];if(!on)return;
+ if(ROLE.all){put(n,localStorage.getItem(KEY[n])||"").then(function(){done(n)}).catch(fail);return}
+ /* akun terbatas: ambil data server terbaru, ganti hanya bagian bidangnya, tulis kembali */
+ sb.from("rkp_state").select("*").then(function(r){if(r.error)throw r.error;
+  var A=assemble(r.data||[]);if(Object.keys(A.bad).length)throw new Error("data server belum lengkap");
+  if(RO[n]&&A.S[n])return;
+  var loc=J(localStorage.getItem(KEY[n]),null);if(loc==null)return;
+  var P={};Object.keys(A.S).forEach(function(k){P[k]=J(A.S[k].s,null)});
+  var c=mkCtx([P,localP()],ROLE.b);
+  return put(n,JSON.stringify(merge(n,loc,P[n],c)))}).then(function(){done(n)}).catch(fail)}
+
 function g(f){try{f()}catch(e){}}
 function rehydrate(){g(load);g(loadR);g(loadPD);g(function(){TX=ld("tx");if(!Array.isArray(TX))TX=[]});g(function(){DG=ld("dg")});g(function(){CP=ld("rencana")});
  g(function(){PJ=JSON.parse(localStorage.getItem(K+"pj")||"{}");["jk","jp","jtk","jl","ja","jb"].forEach(function(id){if(document.activeElement!==$(id))$(id).value=PJ[id]||""})});
  g(rebuildCR);g(render);g(drawPD);g(bal);g(drawTX);g(drawJ);g(drawCair);g(drawDash)}
-function proc(rows){var by={};rows.forEach(function(x){(by[x.name]=by[x.name]||{})[x.i]=x});var ch=false;
+
+/* ---- Terima dari server ---- */
+function procFull(rows){var by={};rows.forEach(function(x){(by[x.name]=by[x.name]||{})[x.i]=x});var ch=false;
  Object.keys(KEY).forEach(function(n){var p=by[n];
   if(!p){var lv=localStorage.getItem(KEY[n]);if(lv&&!T[n])push(n);return}
   var h=p[0];if(!h)return;var all=true,s="";for(var i=0;i<h.n;i++){if(!p[i]){all=false;break}s+=p[i].v}
@@ -1352,16 +1425,49 @@ function proc(rows){var by={};rows.forEach(function(x){(by[x.name]=by[x.name]||{
   if(h.by===ME)return;
   if(s!==(localStorage.getItem(KEY[n])||"")){remote=true;try{rawSet.call(localStorage,KEY[n],s)}finally{remote=false}ch=true}});
  if(ch){rehydrate();st("🟢 Diperbarui oleh pengguna lain")}else if(!Object.keys(T).length)st("🟢 Data bersama aktif")}
+function procR(rows){var A=assemble(rows),P={},ch=false;
+ Object.keys(A.S).forEach(function(k){P[k]=J(A.S[k].s,null)});
+ var c=mkCtx([P,localP()],ROLE.b);
+ Object.keys(KEY).forEach(function(n){var p=A.S[n];
+  if(!p){if(A.bad[n])return;var lv=localStorage.getItem(KEY[n]);if(lv&&!T[n])push(n);return}
+  if(isDirty(n)||T[n]){if(isDirty(n)&&!T[n])push(n);return}
+  if(p.by===ME||P[n]==null)return;
+  var v=JSON.stringify(view(n,P[n],c)),l=JSON.stringify(J(localStorage.getItem(KEY[n]),null));
+  if(v!==l){remote=true;try{rawSet.call(localStorage,KEY[n],v)}finally{remote=false}ch=true}});
+ if(ch){rehydrate();st("🟢 Diperbarui oleh pengguna lain")}else if(!Object.keys(T).length)st("🟢 Data bersama aktif")}
+function proc(rows){ROLE.all?procFull(rows):procR(rows)}
 function pull(){sb.from("rkp_state").select("*").then(function(r){if(r.error){st("🔴 Gagal membaca data");return}proc(r.data||[])})}
-function start(){on=true;po.style.display="";pull();
+
+/* ---- Data lokal perangkat: jangan terbawa antar akun ---- */
+function guard(){var old=ss.getItem("rkp_scope"),cur=sig();
+ if(old!==null&&old!==cur){Object.keys(KEY).forEach(function(n){ss.removeItem(KEY[n]);dirty(n,0)});rehydrate()}
+ else if(old===null&&!ROLE.all){var c=mkCtx([localP()],ROLE.b),ch=false;
+  Object.keys(KEY).forEach(function(n){var l=J(ss.getItem(KEY[n]),null);if(l==null)return;var v=JSON.stringify(view(n,l,c));if(v!==JSON.stringify(l)){remote=true;try{rawSet.call(ss,KEY[n],v)}finally{remote=false}ch=true}});
+  if(ch)rehydrate()}
+ rawSet.call(ss,"rkp_scope",cur)}
+
+/* ---- Tampilan untuk akun terbatas ---- */
+function applyUI(){if(ROLE.all)return;
+ var s2=document.getElementById("s2");if(s2)s2.style.display="none";
+ var t0=window.tab;if(typeof t0==="function")window.tab=function(n){return t0(n==2?1:n)};
+ function fl(id,cb){var e=document.getElementById(id);if(!e)return;
+  var f=function(){var rm=0;Array.prototype.slice.call(e.options).forEach(function(o){if(o.value&&ROLE.b.indexOf(o.value)<0){o.remove();rm=1}});if(rm&&cb)cb()};
+  f();new MutationObserver(f).observe(e,{childList:true})}
+ fl("bid",function(){if(typeof fillS==="function")fillS()});fl("kfb")}
+
+function start(u){ROLE=roleOf(u);on=true;po.style.display="";pw.style.display="";pr.textContent=ROLE.label?"👤 "+ROLE.label:"";
+ guard();applyUI();pull();
  sb.channel("rkp").on("postgres_changes",{event:"*",schema:"public",table:"rkp_state"},function(){clearTimeout(rt);rt=setTimeout(pull,400)}).subscribe();
  setInterval(pull,30000);window.addEventListener("online",pull)}
+function em(v){v=String(v||"").trim();return v.indexOf("@")>=0?v:v.toLowerCase()+"@"+DOM}
 function login(){var o=document.createElement("div");o.className="np";o.style.cssText="position:fixed;inset:0;z-index:100;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:16px";
- o.innerHTML="<div class='c' style='max-width:340px;width:100%'><h3 style='margin:0 0 4px'>Masuk</h3><p class='m' style='margin:0 0 10px'>Akun dibuat oleh admin desa.</p><label>Email</label><input id='lge' type='email' autocomplete='username'><label style='margin-top:8px'>Kata sandi</label><input id='lgp' type='password' autocomplete='current-password'><div id='lgm' class='wn m' style='margin:6px 0'></div><button id='lgb' style='width:100%'>Masuk</button></div>";
+ o.innerHTML="<div class='c' style='max-width:340px;width:100%'><h3 style='margin:0 0 4px'>Masuk</h3><p class='m' style='margin:0 0 10px'>Akun dibuat oleh admin desa.</p><label>Username</label><input id='lge' type='text' autocapitalize='none' autocorrect='off' spellcheck='false' autocomplete='username'><label style='margin-top:8px'>Kata sandi</label><input id='lgp' type='password' autocomplete='current-password'><div id='lgm' class='wn m' style='margin:6px 0'></div><button id='lgb' style='width:100%'>Masuk</button></div>";
  document.body.appendChild(o);
- function go(){sb.auth.signInWithPassword({email:document.getElementById("lge").value.trim(),password:document.getElementById("lgp").value}).then(function(r){if(r.error){var m=(r.error.message||"").toLowerCase(),t=r.error.message;if(m.indexOf("invalid login")>=0)t="Email atau kata sandi salah, atau akun belum dibuat di Supabase.";else if(m.indexOf("not confirmed")>=0)t="Email belum dikonfirmasi. Di Supabase: Authentication > Users > titik tiga > Confirm user.";else if(m.indexOf("api key")>=0||m.indexOf("apikey")>=0)t="Kunci anon di config.js salah. Salin ulang dari Project Settings > API.";document.getElementById("lgm").textContent=t+" ["+r.error.message+"]";return}o.remove();start()})}
+ function go(){sb.auth.signInWithPassword({email:em(document.getElementById("lge").value),password:document.getElementById("lgp").value}).then(function(r){if(r.error){var m=(r.error.message||"").toLowerCase(),t=r.error.message;if(m.indexOf("invalid login")>=0)t="Username atau kata sandi salah, atau akun belum dibuat di Supabase.";else if(m.indexOf("not confirmed")>=0)t="Akun belum dikonfirmasi. Di Supabase: Authentication > Users > titik tiga > Confirm user.";else if(m.indexOf("api key")>=0||m.indexOf("apikey")>=0)t="Kunci anon di config.js salah. Salin ulang dari Project Settings > API.";document.getElementById("lgm").textContent=t+" ["+r.error.message+"]";return}o.remove();start(r.data.user)})}
  document.getElementById("lgb").onclick=go;document.getElementById("lgp").onkeydown=function(e){if(e.key==="Enter")go()}}
-if(C.url&&C.key&&window.supabase){sb=supabase.createClient(C.url,C.key);st("⏳ Menghubungkan…");sb.auth.getSession().then(function(r){if(r.data&&r.data.session)start();else{st("🔒 Silakan masuk");login()}})}
+if(C.url&&C.key&&window.supabase){sb=supabase.createClient(C.url,C.key);st("⏳ Menghubungkan…");sb.auth.getSession().then(function(r){if(r.data&&r.data.session)start(r.data.session.user);else{st("🔒 Silakan masuk");login()}})}
+/* untuk pengujian */
+window.__RKP_SCOPE={mkCtx:mkCtx,view:view,merge:merge,assemble:assemble,roleOf:roleOf,inScope:inScope};
 })();
 </script>
 <style>html{overscroll-behavior-y:contain}body{padding-bottom:env(safe-area-inset-bottom,0)}@media(max-width:640px){input,select,textarea{font-size:16px}}</style>
